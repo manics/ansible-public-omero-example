@@ -1,0 +1,70 @@
+# Trystack single OMERO instance
+
+- hosts: localhost
+  tasks:
+
+  - name: copy ssh public key
+    os_keypair:
+      name: test-sshkey
+      public_key_file: "{{ ansible_env.HOME }}/.ssh/id_rsa.pub"
+      state: present
+
+  - name: security group
+    os_security_group:
+      name: test-secgroup
+      state: present
+
+  - name: security group rules
+    os_security_group_rule:
+      direction: ingress
+      port_range_max: "{{ item }}"
+      port_range_min: "{{ item }}"
+      protocol: tcp
+      remote_ip_prefix: 0.0.0.0/0
+      security_group: test-secgroup
+      state: present
+    with_items:
+      - 22
+      - 80
+      - 443
+      - 4063
+      - 4064
+
+  - name: create network
+    os_network:
+      name: testnet
+      state: present
+
+  - name: create subnet
+    os_subnet:
+      cidr: 192.168.1.0/24
+      dns_nameservers:
+        - 8.8.8.8
+        - 8.8.4.4
+      name: testnet-subnet
+      network_name: testnet
+      state: present
+
+  - name: create external router
+    os_router:
+      interfaces:
+      - testnet-subnet
+      name: testnet-router
+      network: public
+      state: present
+
+  - name: create instance
+    os_server:
+      name: omero-allinone
+      state: present
+      image: CentOS7
+      key_name: test-sshkey
+      flavor: m1.small
+      auto_ip: True
+      security_groups:
+        - test-secgroup
+    register: vm
+
+  - name: get floating ip
+    debug:
+      msg: "External IP: {{ vm.openstack.public_v4 }}"
